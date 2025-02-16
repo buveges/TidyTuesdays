@@ -1,0 +1,51 @@
+## Tidy Tuesday - Sasquatch
+# Read in the TidyTuesday data
+tuesdata <- tidytuesdayR::tt_load(2022, week = 37)
+bigfoot <- tuesdata$bigfoot
+# Load packages
+library(tidyverse)
+library(usmap)
+library(usmapdata)
+library(lubridate)
+library(stringr)
+library(WrensBookshelf)
+
+# Add county and state level data from USMAP and usmap data
+data("countypop")
+data("statepop")
+
+# Pulling out list of state names
+state_names <- statepop %>% 
+  select(abbr,full) %>% 
+  rename(state=full) 
+# Joining state names
+bigfoot <- right_join(x=bigfoot,
+                      y=state_names, 
+                      by=join_by(state))
+# Joining county population
+bigfoot2 <- right_join(bigfoot,
+                       countypop,
+                       by = join_by(abbr,
+                                    county))
+# Adding a year column
+bigfoot2 <- bigfoot2 %>% 
+  mutate(year=year(date))
+# County summary
+CN <- bigfoot2 %>% 
+  group_by(fips) %>%  
+  summarise(n=n())
+# County summary and population
+CN2 <- full_join(CN,countypop)
+
+# Plotting the map
+plot_usmap(include=c("WA") ,
+           regions="counties",
+           data=CN, 
+           values = "n",
+           color="white", 
+           linewidth= 0.01)+
+  scale_fill_WB_c("ThisMooseBelongsToMe")+
+  labs(title="Squatch-ington State",
+       subtitle="Pierce, Snohomish, Skamania, and Lewis County, WA are the top four counties in the US for Bigfoot sightings",
+       fill= "Number of 'squatch' sightings")+
+  theme(legend.position = "bottom")
