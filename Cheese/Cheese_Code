@@ -1,0 +1,150 @@
+## Cheese!
+# Load packages
+library(tidyverse)
+library(stringr)
+library(showtext)
+library(patchwork)
+library(wordcloud)
+library(ggwordcloud)
+# Load Data
+tuesdata <- tidytuesdayR::tt_load(2024, week = 23)
+cheeses <- tuesdata$cheeses
+# Add font
+font_add_google("Prata", family = "special")
+showtext_auto()
+
+# New data frame in long format, splitting by countries of origin
+cheeses_country_long <- cheeses %>% 
+  separate_longer_delim(country,delim=", ")
+# Repeating above by type of cheese
+cheeses_countryType_long <- cheeses_country_long %>% 
+  separate_longer_delim(type,delim=", ")
+
+# Creating data fame with simplified texture column (softHard)
+cheeses_countryHardSoft <- cheeses_countryType_long %>% 
+  filter(str_detect(type,"soft|hard|firm")) %>% 
+  mutate(softHard = if_else(type%in%c( "semi-soft", "soft", "fresh soft", "soft-ripened"), "soft",
+                            if_else(type%in%c("semi-firm" ,"fresh firm","firm"),"firm","hard"))) %>% 
+  mutate(softHard = factor(softHard,levels = c("soft", "firm", "hard"))) %>% 
+  mutate(country = if_else(country %in% c("United Kingdom","Great Britain","England","Scotland", "England, Great Britain, United Kingdom",
+                                          "England, United Kingdom","Wales","Scotland, United Kingdom",
+                                          "Great Britain","Great Britain, Scotland, United Kingdom","Great Britain, United Kingdom, Wales",
+                                          "United Kingdom, Wales"),"United Kingdom",country))
+
+# Creating a country list and summarizing by number of entries 
+country_list <- cheeses_countryHardSoft %>% 
+  group_by(country) %>% 
+  summarise(n=n()) %>% 
+  arrange(desc(n)) %>% 
+  drop_na(country)
+# Filtering for producers who make at least 10 varieties 
+country_list <- country_list %>% filter(n>10)
+cL <- country_list[['country']]
+
+# Setting up summary data frames for three plots
+wheelDat <- cheeses_countryHardSoft %>% 
+  filter(country %in% cL) %>% 
+  group_by(softHard,country) %>%
+  summarise(n=n()) %>%
+  mutate(country=factor(country,levels=cL))
+
+wheelDat2 <- wheelDat %>% 
+  ungroup() %>% 
+  group_by(softHard) %>% 
+  summarise(n=sum(n))
+
+wheelDat3 <- wheelDat %>% 
+  ungroup() %>% 
+  group_by(country) %>% 
+  summarise(n=sum(n)) %>% 
+  arrange(desc(n)) %>% 
+  mutate(country = factor(country, 
+                          levels = country[]))
+
+# Creating bottom plot of multiple "wheel" charts
+bot <- ggplot(wheelDat)+
+  geom_bar(aes(x="", 
+               y=n, 
+               fill = softHard), 
+           stat = "identity", 
+           color="white")+
+  coord_polar("y", start=0)+
+  scale_fill_manual(values = c("#F2D5C4","#F2CD5C","#F2A444"))+
+  facet_wrap(~country, 
+             scales="free",
+             nrow=1)+
+  theme_void()+
+  theme(plot.background = element_rect(fill="#73495D",
+                                       color="#73495D",
+                                       linewidth = 2),
+        text = element_text(color="white",
+                            size=10),
+        legend.position = "none",
+        legend.title=element_blank())
+
+# Creating main "wheel" chart
+top <- ggplot(wheelDat2)+
+  geom_bar(aes(x="", 
+               y=n, 
+               fill = softHard), 
+           stat = "identity", 
+           color="white",
+           linewidth=1)+
+  coord_polar("y", start=0)+
+  scale_fill_manual(values = c("#F2D5C4","#F2CD5C","#F2A444"))+
+  labs(title = "Feelin' kinda cheesy",
+       subtitle = " Left - Breakdown of proportion of cheeses by texture, in countries producing at least 10 varieties.
+ Bottom - distribution of textures by country.
+ Right - words used to describe the texture of cheeses in the database, scaled by frequency")+
+  theme_void()+
+  theme(plot.background = element_rect(fill="#73495D",
+                                       color="#73495D",
+                                       linewidth = 2),
+        text = element_text(color="white",
+                            size=15),
+        legend.direction = "horizontal",
+        legend.position = "inside",
+        legend.position.inside = c(0.5,0.05),
+        legend.title=element_blank(),plot.subtitle = element_text(size=12)
+           )
+
+# Pivoting longer by texture
+cheeses_texture_long <- cheeses %>% 
+  separate_longer_delim(texture,delim=", ")
+# Texture summary
+texture <- cheeses_texture_long %>% group_by(texture) %>% summarise(n = n())
+
+# Testing word cloud
+wordcloud(words=texture$texture,freq = texture$n, min.freq = 1)
+
+# Creating word cloud
+rit_top <- ggplot(texture)+
+  geom_text_wordcloud_area(aes(label=texture,size=n),
+                           shape="square",
+                           color="white",
+                           eccentricity = 0.35)+
+  scale_size_area(max_size = 60) +
+  theme_minimal()+
+    theme_minimal()+
+    theme(plot.background = element_rect(fill="#73495D",
+                                         color="#73495D",
+                                         linewidth = 2),
+          text = element_text(color="white",
+                              size=15
+          ))
+
+# Plot layout
+design <- "
+AAB
+AAB
+AAB
+AAB
+AAB
+CCC
+"
+# Plot
+top+
+  rit_top+
+  bot+
+  plot_layout(design = design)&theme(plot.background = element_rect(fill="#73495D",color="#73495D"))
+
