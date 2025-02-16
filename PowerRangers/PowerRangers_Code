@@ -1,0 +1,146 @@
+## It's Morphin Time!
+# Load Packages
+library(tidyverse)
+library(showtext)
+library(ggimage)
+library(patchwork)
+
+# Data import and set up ####
+
+# Adding a fancy font
+font_add_google("Geo", family = "special")
+showtext_auto()
+# Load data
+tuesdata <- tidytuesdayR::tt_load(2024, week = 35)
+# Pulling out episodes and seasons into their own data frames
+power_rangers_episodes <- tuesdata$power_rangers_episodes
+power_rangers_seasons <- tuesdata$power_rangers_seasons
+
+# Manually adding Ranger colors by season...
+PR_cols <- {tribble(~"season_title", ~"Colors",
+"Mighty Morphin (Season 1)",c("red","pink","yellow","green","blue","black","white"),
+"Mighty Morphin (Season 2)", c("red","pink","yellow","green","blue","black","white"),
+"Mighty Morphin (Season 3)",c("red","pink","yellow","green","blue","black","white"),
+"Zeo",c("red","pink","yellow","green","blue","gold"),
+"Turbo", c("red","pink","yellow","green","blue"),
+"In Space",c("red","pink","yellow","blue","black","white"),
+"Lost Galaxy",c("red","pink","yellow","green","blue"),
+"Lightspeed Rescue",     c("red","pink","yellow","green","blue","#c0c0c0"),
+"Time Force", c("red","pink","yellow","green","blue"),
+"Wild Force", c("red","yellow","blue","black","white","#c0c0c0"),
+"Ninja Storm",c("red","yellow","green","turquoise", "#dc143c","navy"),
+"Dino Thunder",c("red","yellow","blue","black","white"),
+"S.P.D.",c("red","pink","yellow","green","blue","black","white","#c0c0c0","orange"),
+"Mystic Force",c("red","pink","yellow","green","blue","white","gold","#dc143c"),
+"Operation Overdrive",c("red","pink","yellow","blue","black","white"),
+"Jungle Fury",  c("red","yellow","green","blue","black","white","purple","turquoise"),        
+"R.P.M.",c("red","yellow","green","blue","black","#c0c0c0","gold"),  
+"Samurai",c("red","pink","yellow","green","blue","gold","#E05955"),
+"Super Samurai",c("red","pink","yellow","green","blue","gold","#E05955"),
+"Megaforce",c("red","pink","yellow","blue","black"),
+"Super Megaforce",c("red","pink","yellow","green","blue","black","#c0c0c0"),
+"Dino Charge",c("red","pink","green","blue","black","gold","purple"),
+"Dino Super Charge",c("red","pink","green","blue","black","white","#c0c0c0","gold","turquoise","purple"),
+"Ninja Steel", c("red","pink","yellow","blue","white","gold"),
+"Super Ninja Steel",c("red","pink","yellow","blue","white","gold"),
+"Beast Morphers (Season 1)",c("red","yellow","blue","white","gold","#dc143c"),
+"Beast Morphers (Season 2)",c("red","yellow","blue","white","gold","#dc143c"),
+"Dino Fury" , c("red","pink","green","blue","black","gold")
+)
+}
+# Creating title offset column for the final plot
+PR_cols <- PR_cols %>% mutate(n = lengths(Colors),
+                              ofs=c(1,1,1,0.5,0.5,0.5,0.75,1,0.75,0.75,0.75,0.75,0.5,0.75,-1.1,0.6,0.5,-1,-1,0.6,-1,0.75,0.75,0.75,0.75,1,1,0.5))
+
+
+test <- rep(1:nrow(PR_cols),PR_cols$n)
+# Pulling out seasons names
+Seasons <- unique(power_rangers_seasons$season_title)
+# Duplicate
+dup <- PR_cols[test,] %>% mutate(cols =c(unlist(PR_cols$Colors)),
+                                 season_title=factor(season_title, levels=rev(Seasons)))
+# Setting color order factor levels based on frequency of occurence
+col_ord <- dup %>% group_by(cols) %>% summarise(n=n()) %>% arrange(desc(n)) %>% 
+  mutate(names= c("red","blue","yellow", "pink","green", "black", "white","gold",
+                  "silver",  "crimson",   "purple" ,  "turquoise" ,"light red",  "navy",  "orange"  )) %>% 
+  mutate(names = factor(names,levels=names))
+
+dup <- dup %>% mutate(cols2=factor(cols, levels = col_ord$cols, labels =col_ord$names))
+
+ofs <- c(1,1,1,0.2,0.5,0.5,0.75,1,0.5,0.5,0.5,0.5,0.2,0.5,0.5,0.5,0.2,-1.5,-1.5,0.5,0.75,0.5,0.75,0.5,0.75,1,1,0.5)
+
+dup <- left_join(dup,
+                 power_rangers_seasons,
+                 by="season_title")
+# Adding factor levels to seasons
+dup <- dup %>% mutate(season_title=factor(season_title,
+                                          levels=Seasons))
+
+# Creating top plot
+top <- ggplot(dup)+
+  geom_crossbar(aes(y=IMDB_rating-0.25,ymin=IMDB_rating-0.25, ymax=IMDB_rating+0.5, x =season_title, 
+                    fill=cols,
+                    group=cols2,
+                    #color=cols
+                    ),
+                width=100,
+                linewidth = 0.1,
+                color="black",
+                stat="identity",
+           position="dodge")+
+  geom_text(aes(x=season_title,y=IMDB_rating-ofs,label=season_title),
+            angle=90, family='special' )+
+  scale_x_discrete(expand=expansion(add = c(1, 1)))+
+  scale_fill_identity()+
+  scale_color_identity()+
+  facet_grid(~season_title, labeller = label_wrap_gen(multi_line = TRUE))+
+  scale_y_continuous(labels = function(x){paste(x, "-")},    # simulate tick marks for left axis
+                     sec.axis = dup_axis(breaks = 0),
+                     ) +      # add right axis
+  labs(y="Season IMDB rating", x= "Season",
+       title= "All the colors of the Rangers",
+       subtitle = "Top plot shows the IMDB rating of each season of Power Rangers, with the colored bars indicating the colors of the Rangers present that season.
+       Bottom plot shows the number of times a given color Ranger was portrayed across all 28 seasons.")+
+  theme_classic()+
+  theme(
+    text = element_text(family="special"),
+    axis.ticks.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.title.x = element_blank(),
+    panel.background = element_blank(),
+    panel.grid = element_blank(),
+    strip.text.x.top = element_blank(),
+    strip.background = element_blank(),
+    axis.title.y.right = element_blank(),                # hide right axis title
+    axis.text.y.right = element_blank(),                 # hide right axis labels
+    axis.ticks.y = element_blank(),                      # hide left/right axis ticks
+    axis.text.y = element_text(margin = margin(r = 0)),  # move left axis labels closer to axis
+    panel.spacing = unit(0, "mm"),                       # remove spacing between facets
+  )
+
+top
+
+# Adding in lightning blot image
+df_image <-  data.frame(x=c("navy"), y=c(17), image=c('Images/PowerRangersBolt.png'))
+
+# Creating bottom plot
+bot <- ggplot(col_ord)+
+  geom_bar(aes(y=n,x=names,fill=cols),
+           position="dodge",
+           stat="identity",
+           color="black")+
+  scale_fill_identity()+
+  labs(y="Number of seasons present",
+       x="Ranger Color")+
+  geom_image(data=df_image, 
+             aes(x,y, image=image),size=0.35)+
+  scale_x_discrete(expand=expansion(add = c(0.75, 0.75)))+
+  scale_y_continuous(expand=c(0,0),
+                     )+
+  theme_classic()+
+  theme( axis.title.y.right = element_blank(),                # hide right axis title
+         axis.text.y.right = element_blank(),
+         text = element_text(family="special"))
+
+# plotting both top and bottom
+top/bot
